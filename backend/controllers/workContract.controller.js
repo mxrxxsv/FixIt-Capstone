@@ -1525,6 +1525,12 @@ const getClientReviews = async (req, res) => {
           lastName: clientLast,
           averageRating: client.averageRating,
           totalJobsPosted: client.totalJobsPosted,
+          profilePicture: client.profilePicture?.url || null,
+          verificationStatus: client.verificationStatus,
+          isVerified: client.isVerified,
+          hasIdDocuments: Boolean(client.idPictureId && client.selfiePictureId),
+          idPictureId: client.idPictureId,
+          selfiePictureId: client.selfiePictureId,
         },
       },
       meta: {

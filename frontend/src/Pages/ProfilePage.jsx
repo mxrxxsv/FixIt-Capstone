@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Clock, MapPin, Briefcase, X, Tag, Pencil } from "lucide-react";
+import {
+  MapPin,
+  Briefcase,
+  X,
+  Pencil,
+  ShieldCheck,
+  ShieldAlert,
+  FileWarning,
+} from "lucide-react";
 import { getProfile } from "../api/profile";
 import {
   uploadProfilePicture,
@@ -28,6 +36,91 @@ const formatAddress = (address) => {
     Boolean
   );
   return parts.length ? parts.join(", ") : "Unknown";
+};
+
+const normalizeStatus = (status) =>
+  String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+const formatStatusText = (status) => {
+  if (!status) return "Not provided";
+  return String(status)
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const hasIdentityDocuments = (entity = {}) =>
+  Boolean(
+    entity.hasIdDocuments || (entity.idPictureId && entity.selfiePictureId)
+  );
+
+const deriveVerificationMeta = (entity = {}) => {
+  const normalizedStatus = normalizeStatus(entity.verificationStatus);
+  const hasDocs = hasIdentityDocuments(entity);
+  const manualApproval = Boolean(entity.isVerified ?? entity.profile?.isVerified);
+  const ApprovedStatuses = new Set(["approved", "verified", "auto_verified"]);
+  const PendingStatuses = new Set([
+    "pending",
+    "submitted",
+    "processing",
+    "in_review",
+    "under_review",
+    "review",
+  ]);
+  const RejectedStatuses = new Set([
+    "rejected",
+    "declined",
+    "failed",
+    "needs_resubmission",
+  ]);
+
+  if (manualApproval || (hasDocs && ApprovedStatuses.has(normalizedStatus))) {
+    return {
+      label: "Verified",
+      badgeClass:
+        "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+      helperText: formatStatusText(entity.verificationStatus),
+      icon: ShieldCheck,
+    };
+  }
+
+  if (!hasDocs) {
+    return {
+      label: "Upload required",
+      badgeClass: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+      helperText: "Submit a valid ID and selfie to begin verification",
+      icon: FileWarning,
+    };
+  }
+
+  if (PendingStatuses.has(normalizedStatus)) {
+    return {
+      label: "Pending review",
+      badgeClass: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+      helperText: formatStatusText(entity.verificationStatus),
+      icon: ShieldAlert,
+    };
+  }
+
+  if (RejectedStatuses.has(normalizedStatus)) {
+    return {
+      label: "Action required",
+      badgeClass: "bg-red-50 text-red-700 ring-1 ring-red-200",
+      helperText: formatStatusText(entity.verificationStatus),
+      icon: ShieldAlert,
+    };
+  }
+
+  return {
+    label: "Unverified",
+    badgeClass: "bg-gray-50 text-gray-600 ring-1 ring-gray-200",
+    helperText: formatStatusText(entity.verificationStatus),
+    icon: ShieldAlert,
+  };
 };
 
 const ProfilePage = () => {
@@ -390,6 +483,8 @@ const ProfilePage = () => {
   }
 
   const { userType, fullName, image, address, biography } = currentUser;
+  const verificationMeta = deriveVerificationMeta(currentUser);
+  const VerificationIcon = verificationMeta.icon;
 
   return (
     <div className="max-w-6xl mx-auto p-6 mt-[100px]">
@@ -423,9 +518,19 @@ const ProfilePage = () => {
           <p className="text-sm text-gray-500 flex items-center justify-center md:justify-start gap-1">
             <MapPin size={16} /> {formatAddress(address)}
           </p>
-          <span className="text-xs px-2 py-1 rounded-md bg-[#55B2F3]/90 text-white mt-2 inline-block">
-            {userType === "client" ? "Client" : "Worker"}
-          </span>
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-2">
+            <span className="text-xs px-2 py-1 rounded-md bg-[#55B2F3]/90 text-white inline-flex items-center gap-1">
+              {userType === "client" ? "Client" : "Worker"}
+            </span>
+            {VerificationIcon && (
+              <span
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${verificationMeta.badgeClass}`}
+              >
+                <VerificationIcon className="w-3 h-3" />
+                {verificationMeta.label}
+              </span>
+            )}
+          </div>
 
           {userType === "worker" && (
             <div className="relative mt-4">

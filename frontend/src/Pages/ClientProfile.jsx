@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAllJobs, getJobById } from "../api/jobs";
 import { getClientReviewsById } from "../api/feedback";
-import { MapPin, Star, Briefcase, ArrowLeft } from "lucide-react";
+import {
+  MapPin,
+  Star,
+  Briefcase,
+  ArrowLeft,
+  ShieldCheck,
+  ShieldAlert,
+} from "lucide-react";
 
 const PLACEHOLDER =
   "https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png";
@@ -41,6 +48,29 @@ const Stars = ({ value = 0 }) => {
 const renderStars = (rating) => {
   const r = Math.max(0, Math.min(5, Number(rating) || 0));
   return "⭐️".repeat(r) + "☆".repeat(5 - r);
+};
+
+const deriveClientVerification = (...sources) => {
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+
+    const hasDocs =
+      source.hasIdDocuments ??
+      Boolean(source.idPictureId && source.selfiePictureId);
+
+    const rawStatus = source.verificationStatus || source.verified || "";
+    const status = String(rawStatus).toLowerCase();
+
+    const flag = Boolean(
+      source.isVerified ?? source.profile?.isVerified ?? false
+    );
+
+    if (hasDocs && (flag || status === "approved" || status === "verified")) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 export default function ClientProfile() {
@@ -95,10 +125,32 @@ export default function ClientProfile() {
 
         // Build client info strictly from this client's job payload (fallback to reviews stats only for ratings)
         const firstJob = jobsArr && jobsArr[0];
-        const rawPic = firstJob?.client?.profilePicture;
-        const clientPic = rawPic?.url || (typeof rawPic === "string" ? rawPic : null);
-        const clientName = firstJob?.client?.name || "Client";
-        setClientInfo({ name: clientName, avatar: clientPic });
+        const statsClient = d.client;
+        const rawPic =
+          firstJob?.client?.profilePicture ||
+          statsClient?.profilePicture ||
+          statsClient?.image;
+        const clientPic =
+          rawPic?.url || (typeof rawPic === "string" ? rawPic : null);
+        const clientName =
+          firstJob?.client?.name ||
+          statsClient?.name ||
+          `${statsClient?.firstName || ""} ${statsClient?.lastName || ""}`.trim() ||
+          "Client";
+        const resolvedVerificationStatus =
+          firstJob?.client?.verificationStatus ||
+          statsClient?.verificationStatus ||
+          null;
+        const isVerifiedFlag = deriveClientVerification(
+          firstJob?.client,
+          statsClient
+        );
+        setClientInfo({
+          name: clientName,
+          avatar: clientPic,
+          isVerified: isVerifiedFlag,
+          verificationStatus: resolvedVerificationStatus,
+        });
       } catch (e) {
         console.error("Failed to load client profile:", e);
       } finally {
@@ -211,6 +263,29 @@ export default function ClientProfile() {
               <Stars value={avg} />
               <span className="text-sm text-gray-600">{total} review{total === 1 ? "" : "s"}</span>
             </div>
+            {clientInfo && (
+              <div className="flex flex-col items-start gap-1">
+                <div
+                  className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full ${
+                    clientInfo.isVerified
+                      ? "bg-green-100 text-green-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {clientInfo.isVerified ? (
+                    <ShieldCheck size={14} />
+                  ) : (
+                    <ShieldAlert size={14} />
+                  )}
+                  {clientInfo.isVerified ? "Verified Client" : "Not Verified"}
+                </div>
+                {clientInfo.verificationStatus && (
+                  <span className="text-xs text-gray-500 capitalize">
+                    Status: {String(clientInfo.verificationStatus).replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

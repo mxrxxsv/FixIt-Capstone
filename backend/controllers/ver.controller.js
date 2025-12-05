@@ -1598,7 +1598,7 @@ const checkAuth = async (req, res) => {
         .select(
           "_id firstName lastName address profilePicture isVerified " +
             "portfolio skillsByCategory experience certificates " +
-            "idPictureId idPictureUrl verificationStatus biography education"
+            "idPictureId selfiePictureId idPictureUrl verificationStatus biography education"
         )
         .populate("skillsByCategory.skillCategoryId", "categoryName")
         .lean();
@@ -1699,6 +1699,7 @@ const checkAuth = async (req, res) => {
           experience: user.experience || [],
           certificates: user.certificates || [],
           idPictureId: user.idPictureId,
+          selfiePictureId: user.selfiePictureId,
           idPictureUrl: user.idPictureUrl,
           verified: user.verificationStatus,
           biography: user.biography,

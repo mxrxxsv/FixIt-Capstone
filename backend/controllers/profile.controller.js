@@ -1742,7 +1742,7 @@ const getProfile = async (req, res) => {
         .select(
           "_id firstName lastName address profilePicture isVerified " +
             "portfolio skillsByCategory experience certificates " +
-            "idPictureId idPictureUrl verificationStatus biography education"
+            "idPictureId selfiePictureId idPictureUrl verificationStatus biography education"
         )
         .populate("skillsByCategory.skillCategoryId", "categoryName")
         .lean();
@@ -1845,6 +1845,7 @@ const getProfile = async (req, res) => {
           experience: profile.experience || [],
           certificates: profile.certificates || [],
           idPictureId: profile.idPictureId,
+          selfiePictureId: profile.selfiePictureId,
           idPictureUrl: profile.idPictureUrl,
           verified: profile.verificationStatus,
           biography: profile.biography,

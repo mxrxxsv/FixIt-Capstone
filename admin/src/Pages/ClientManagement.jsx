@@ -3,12 +3,14 @@ import {
   Users,
   Eye,
   Search,
-  Filter,
   ChevronLeft,
   ChevronRight,
   Ban,
   CheckCircle,
   AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
+  FileWarning,
   X,
   Loader,
 } from "lucide-react";
@@ -17,6 +19,99 @@ import {
   blockClient,
   unblockClient,
 } from "../Api/clientmanagement";
+
+const normalizeStatus = (status) =>
+  String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+const formatStatusText = (status) => {
+  if (!status) return "Not Provided";
+  return String(status)
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const hasIdentityDocuments = (client = {}) =>
+  Boolean(
+    client.hasIdDocuments ??
+      (client.idPictureId && client.selfiePictureId)
+  );
+
+const getVerificationMeta = (client = {}) => {
+  const hasDocs = hasIdentityDocuments(client);
+  const normalizedStatus = normalizeStatus(client.verificationStatus);
+  const readableStatus = formatStatusText(client.verificationStatus);
+  const effectiveIsVerified = Boolean(
+    client.effectiveIsVerified ?? client.isVerified ?? false
+  );
+
+  if (effectiveIsVerified) {
+    return {
+      label: "Verified",
+      badgeClass:
+        "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+      icon: ShieldCheck,
+      helperText: readableStatus || "Verification approved",
+    };
+  }
+
+  if (!hasDocs) {
+    return {
+      label: "No ID Documents",
+      badgeClass:
+        "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+      icon: FileWarning,
+      helperText: "Client must upload ID and selfie",
+    };
+  }
+
+  const pendingStatuses = new Set([
+    "pending",
+    "submitted",
+    "processing",
+    "in_review",
+    "under_review",
+    "review",
+  ]);
+
+  if (pendingStatuses.has(normalizedStatus)) {
+    return {
+      label: "Pending Review",
+      badgeClass:
+        "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+      icon: ShieldAlert,
+      helperText: readableStatus || "Awaiting compliance review",
+    };
+  }
+
+  const rejectedStatuses = new Set([
+    "rejected",
+    "declined",
+    "failed",
+    "needs_resubmission",
+  ]);
+
+  if (rejectedStatuses.has(normalizedStatus)) {
+    return {
+      label: "Action Required",
+      badgeClass:
+        "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200",
+      icon: ShieldAlert,
+      helperText: readableStatus || "Compliance rejected documents",
+    };
+  }
+
+  return {
+    label: "Pending Verification",
+    badgeClass: "bg-slate-50 text-slate-700 ring-1 ring-slate-200",
+    icon: ShieldAlert,
+    helperText: readableStatus || "Status not reported",
+  };
+};
 
 const ClientManagement = () => {
   const [clients, setClients] = useState([]);
@@ -40,6 +135,8 @@ const ClientManagement = () => {
     total: 0,
     blocked: 0,
     active: 0,
+    verified: 0,
+    unverified: 0,
   });
 
   useEffect(() => {
@@ -69,13 +166,14 @@ const ClientManagement = () => {
         setTotalItems(pagination.totalItems || 0);
 
         // Update statistics
-        setStatistics(
-          response.data.statistics || {
-            total: 0,
-            blocked: 0,
-            active: 0,
-          }
-        );
+        const stats = response.data.statistics || {};
+        setStatistics({
+          total: stats.total || 0,
+          blocked: stats.blocked || 0,
+          active: stats.active || 0,
+          verified: stats.verified || 0,
+          unverified: stats.unverified || 0,
+        });
       } else {
         console.error("API returned error:", response.message);
         setClients([]);
@@ -209,6 +307,17 @@ const ClientManagement = () => {
     });
   };
 
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const calculateAge = (dobString) => {
     if (!dobString) return null;
     const dob = new Date(dobString);
@@ -216,6 +325,14 @@ const ClientManagement = () => {
     const ageDate = new Date(diffMs);
     return Math.abs(ageDate.getUTCFullYear() - 1970);
   };
+
+  const selectedClientMeta = selectedClient
+    ? getVerificationMeta(selectedClient)
+    : null;
+  const selectedClientHasDocs = selectedClient
+    ? hasIdentityDocuments(selectedClient)
+    : false;
+  const SelectedVerificationIcon = selectedClientMeta?.icon;
 
   return (
     <div className="p-4 sm:ml-64 overflow-hidden">
@@ -232,46 +349,64 @@ const ClientManagement = () => {
         </div>
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-600">
-                  Total Clients
-                </p>
-                <p className="text-2xl font-bold text-blue-800">
-                  {statistics.total}
-                </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+          {[
+            {
+              title: "Total Clients",
+              value: statistics.total,
+              icon: Users,
+              bg: "bg-blue-50",
+              color: "text-blue-600",
+            },
+            {
+              title: "Active Clients",
+              value: statistics.active,
+              icon: CheckCircle,
+              bg: "bg-green-50",
+              color: "text-green-600",
+            },
+            {
+              title: "Verified",
+              value: statistics.verified,
+              icon: ShieldCheck,
+              bg: "bg-emerald-50",
+              color: "text-emerald-600",
+            },
+            {
+              title: "Needs Verification",
+              value: statistics.unverified,
+              icon: ShieldAlert,
+              bg: "bg-amber-50",
+              color: "text-amber-600",
+            },
+            {
+              title: "Blocked",
+              value: statistics.blocked,
+              icon: Ban,
+              bg: "bg-red-50",
+              color: "text-red-600",
+            },
+          ].map((card) => {
+            const Icon = card.icon;
+            return (
+              <div
+                key={card.title}
+                className={`${card.bg} p-4 rounded-lg border border-transparent`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`text-sm font-medium ${card.color}`}>
+                      {card.title}
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {card.value}
+                    </p>
+                  </div>
+                  <Icon className={`w-8 h-8 ${card.color}`} />
+                </div>
               </div>
-              <Users className="w-8 h-8 text-blue-500" />
-            </div>
-          </div>
-          <div className="bg-green-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600">
-                  Active Clients
-                </p>
-                <p className="text-2xl font-bold text-green-800">
-                  {statistics.active}
-                </p>
-              </div>
-              <CheckCircle className="w-8 h-8 text-green-500" />
-            </div>
-          </div>
-          <div className="bg-red-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-red-600">
-                  Blocked Clients
-                </p>
-                <p className="text-2xl font-bold text-red-800">
-                  {statistics.blocked}
-                </p>
-              </div>
-              <Ban className="w-8 h-8 text-red-500" />
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         {/* Filters and Search */}
@@ -372,6 +507,7 @@ const ClientManagement = () => {
                     </th>
                     <th className="px-6 py-3">Gender</th>
                     <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Verification</th>
                     <th className="px-6 py-3">City</th>
                     {/* <th className="px-6 py-3">Contact</th> */}
                     <th
@@ -389,85 +525,115 @@ const ClientManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {clients.map((client) => (
-                    <tr
-                      key={client._id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-6 py-3">
-                        <img
-                          src={
-                            client.profilePicture?.url || "https://t3.ftcdn.net/jpg/06/33/54/78/360_F_633547842_AugYzexTpMJ9z1YcpTKUBoqBF0CUCk10.jpg"
-                          }
-                          alt="Profile"
-                          className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
-                        />
-                      </td>
-                      <td className="px-6 py-3">
-                        <div className="font-medium text-gray-900">
-                          {client.firstName}{" "}
-                          {client.middleName && `${client.middleName} `}
-                          {client.lastName}
-                          {client.suffixName && ` ${client.suffixName}`}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3">
-                        <div className="text-gray-900">{client.email}</div>
-                        <div className="text-xs text-gray-500 capitalize">
-                          {client.userType}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3 capitalize">{client.sex}</td>
-                      <td className="px-6 py-3">
-                        {client.blocked ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            <Ban className="w-3 h-3 mr-1" />
-                            Blocked
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Active
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-3">{client.address?.city}</td>
-                      {/* <td className="px-6 py-3">{client.contactNumber}</td> */}
-                      <td className="px-6 py-3 text-gray-500">
-                        {formatDate(client.createdAt)}
-                      </td>
-                      <td className="px-6 py-3">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => viewClientDetails(client)}
-                            className="flex items-center gap-1 px-2 py-1 text-xs bg-[#55b3f3] text-white rounded hover:bg-sky-600 transition-colors cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3" />
-                            View
-                          </button>
+                  {clients.map((client) => {
+                    const verificationMeta = getVerificationMeta(client);
+                    const VerificationIcon = verificationMeta.icon;
+                    const hasDocs = hasIdentityDocuments(client);
+
+                    return (
+                      <tr
+                        key={client._id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-3">
+                          <img
+                            src={
+                              client.profilePicture?.url ||
+                              "https://t3.ftcdn.net/jpg/06/33/54/78/360_F_633547842_AugYzexTpMJ9z1YcpTKUBoqBF0CUCk10.jpg"
+                            }
+                            alt="Profile"
+                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                          />
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="font-medium text-gray-900">
+                            {client.firstName}{" "}
+                            {client.middleName && `${client.middleName} `}
+                            {client.lastName}
+                            {client.suffixName && ` ${client.suffixName}`}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="text-gray-900">{client.email}</div>
+                          <div className="text-xs text-gray-500 capitalize">
+                            {client.userType}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 capitalize">{client.sex}</td>
+                        <td className="px-6 py-3">
                           {client.blocked ? (
-                            <button
-                              onClick={() => handleUnblockClient(client)}
-                              disabled={actionLoading}
-                              className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              <CheckCircle className="w-3 h-3" />
-                              Unblock
-                            </button>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              <Ban className="w-3 h-3 mr-1" />
+                              Blocked
+                            </span>
                           ) : (
-                            <button
-                              onClick={() => openBlockModal(client)}
-                              disabled={actionLoading}
-                              className="flex items-center gap-1 px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              <Ban className="w-3 h-3" />
-                              Block
-                            </button>
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Active
+                            </span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${verificationMeta.badgeClass}`}
+                            >
+                              {VerificationIcon && (
+                                <VerificationIcon className="w-3 h-3" />
+                              )}
+                              {verificationMeta.label}
+                            </span>
+                            {verificationMeta.helperText && (
+                              <span className="text-xs text-gray-500">
+                                {verificationMeta.helperText}
+                              </span>
+                            )}
+                            {!hasDocs && (
+                              <span className="flex items-center gap-1 text-xs text-amber-600">
+                                <AlertTriangle className="w-3 h-3" />
+                                Upload ID + selfie
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3">{client.address?.city}</td>
+                        {/* <td className="px-6 py-3">{client.contactNumber}</td> */}
+                        <td className="px-6 py-3 text-gray-500">
+                          {formatDate(client.createdAt)}
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => viewClientDetails(client)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-[#55b3f3] text-white rounded hover:bg-sky-600 transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3 h-3" />
+                              View
+                            </button>
+                            {client.blocked ? (
+                              <button
+                                onClick={() => handleUnblockClient(client)}
+                                disabled={actionLoading}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <CheckCircle className="w-3 h-3" />
+                                Unblock
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => openBlockModal(client)}
+                                disabled={actionLoading}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <Ban className="w-3 h-3" />
+                                Block
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -578,6 +744,16 @@ const ClientManagement = () => {
                           Active
                         </span>
                       )}
+                      {selectedClientMeta && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${selectedClientMeta.badgeClass}`}
+                        >
+                          {SelectedVerificationIcon && (
+                            <SelectedVerificationIcon className="w-3 h-3" />
+                          )}
+                          {selectedClientMeta.label}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -649,6 +825,56 @@ const ClientManagement = () => {
                     </div>
                   </div>
                 </div>
+
+                {selectedClient && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-700 mb-2">
+                      Verification Overview
+                    </h4>
+                    {selectedClientMeta && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${selectedClientMeta.badgeClass}`}
+                      >
+                        {SelectedVerificationIcon && (
+                          <SelectedVerificationIcon className="w-3 h-3" />
+                        )}
+                        {selectedClientMeta.label}
+                      </span>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600 mt-4">
+                      <div>
+                        <span className="font-medium">Status:</span> {" "}
+                        {formatStatusText(selectedClient.verificationStatus)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Has ID Documents:</span> {" "}
+                        {selectedClientHasDocs ? "Yes" : "No"}
+                      </div>
+                      <div>
+                        <span className="font-medium">Submitted:</span> {" "}
+                        {formatDateTime(selectedClient.idVerificationSubmittedAt)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Reviewed:</span> {" "}
+                        {formatDateTime(selectedClient.idVerificationApprovedAt)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Verified:</span> {" "}
+                        {formatDateTime(selectedClient.verifiedAt)}
+                      </div>
+                    </div>
+                    {selectedClientMeta?.helperText && (
+                      <p className="mt-3 text-xs text-gray-500">
+                        {selectedClientMeta.helperText}
+                      </p>
+                    )}
+                    {!selectedClientHasDocs && (
+                      <p className="mt-2 text-xs text-amber-600 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> ID card and selfie are required for verification.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Address Information */}
                 {selectedClient.address && (

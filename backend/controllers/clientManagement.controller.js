@@ -127,11 +127,56 @@ const getClients = async (req, res) => {
           blocked: 1,
           blockReason: 1,
           isVerified: 1,
+          idPictureId: 1,
+          selfiePictureId: 1,
+          verificationStatus: 1,
+          idVerificationSubmittedAt: 1,
+          idVerificationApprovedAt: 1,
           verifiedAt: 1,
           createdAt: 1,
           credentialId: "$cred._id",
           email: "$cred.email",
           userType: "$cred.userType",
+        },
+      },
+      {
+        $addFields: {
+          hasIdDocuments: {
+            $and: [
+              { $ne: [{ $ifNull: ["$idPictureId", null] }, null] },
+              { $ne: [{ $ifNull: ["$selfiePictureId", null] }, null] },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          effectiveIsVerified: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: ["$isVerified", true] },
+                  {
+                    $and: [
+                      "$hasIdDocuments",
+                      {
+                        $in: [
+                          {
+                            $toLower: {
+                              $ifNull: ["$verificationStatus", ""],
+                            },
+                          },
+                          ["approved", "verified", "auto_verified"],
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              true,
+              false,
+            ],
+          },
         },
       },
     ];
@@ -222,11 +267,68 @@ const getClients = async (req, res) => {
       { $unwind: "$cred" },
       { $match: { "cred.userType": "client" } },
       {
+        $project: {
+          blocked: 1,
+          isVerified: 1,
+          idPictureId: 1,
+          selfiePictureId: 1,
+          verificationStatus: 1,
+        },
+      },
+      {
+        $addFields: {
+          hasIdDocuments: {
+            $and: [
+              { $ne: [{ $ifNull: ["$idPictureId", null] }, null] },
+              { $ne: [{ $ifNull: ["$selfiePictureId", null] }, null] },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          effectiveIsVerified: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: ["$isVerified", true] },
+                  {
+                    $and: [
+                      "$hasIdDocuments",
+                      {
+                        $in: [
+                          {
+                            $toLower: {
+                              $ifNull: ["$verificationStatus", ""],
+                            },
+                          },
+                          ["approved", "verified", "auto_verified"],
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              true,
+              false,
+            ],
+          },
+        },
+      },
+      {
         $group: {
           _id: null,
           total: { $sum: 1 },
           blocked: { $sum: { $cond: [{ $eq: ["$blocked", true] }, 1, 0] } },
           active: { $sum: { $cond: [{ $ne: ["$blocked", true] }, 1, 0] } },
+          verified: {
+            $sum: { $cond: [{ $eq: ["$effectiveIsVerified", true] }, 1, 0] },
+          },
+          unverified: {
+            $sum: {
+              $cond: [{ $eq: ["$effectiveIsVerified", true] }, 0, 1],
+            },
+          },
         },
       },
     ]);
@@ -238,8 +340,10 @@ const getClients = async (req, res) => {
           total: statsAggregation[0].total,
           blocked: statsAggregation[0].blocked,
           active: statsAggregation[0].active,
+          verified: statsAggregation[0].verified,
+          unverified: statsAggregation[0].unverified,
         }
-        : { total: 0, blocked: 0, active: 0 };
+        : { total: 0, blocked: 0, active: 0, verified: 0, unverified: 0 };
 
     const processingTime = Date.now() - startTime;
 

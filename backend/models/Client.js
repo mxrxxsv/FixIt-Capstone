@@ -119,6 +119,46 @@ const ClientSchema = new mongoose.Schema(
         },
       },
     ],
+
+    // ==================== ID VERIFICATION FIELDS ====================
+    idPictureId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IDPicture",
+      default: null,
+    },
+    selfiePictureId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Selfie",
+      default: null,
+    },
+    verificationStatus: {
+      type: String,
+      enum: ["not_submitted", "pending", "approved", "rejected"],
+      default: "not_submitted",
+    },
+    idVerificationSubmittedAt: {
+      type: Date,
+      default: null,
+    },
+    idVerificationApprovedAt: {
+      type: Date,
+      default: null,
+    },
+    approvedByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    idVerificationRejectedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectedByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+
     blocked: {
       type: Boolean,
       default: false,
@@ -154,7 +194,29 @@ const ClientSchema = new mongoose.Schema(
   }
 );
 
+// ==================== VIRTUALS ====================
+ClientSchema.virtual("hasCompleteIdVerification").get(function () {
+  return !!(this.idPictureId && this.selfiePictureId);
+});
+
+ClientSchema.virtual("canResubmit").get(function () {
+  return this.verificationStatus === "rejected";
+});
+
+ClientSchema.virtual("verificationStatusText").get(function () {
+  const statusMap = {
+    not_submitted: "Not Submitted",
+    pending: "Under Review",
+    approved: "Approved",
+    rejected: "Rejected",
+  };
+  return statusMap[this.verificationStatus] || "Unknown";
+});
+
 // ==================== INDEXES ====================
+ClientSchema.index({ credentialId: 1 }, { unique: true });
+ClientSchema.index({ verificationStatus: 1 });
+ClientSchema.index({ idVerificationSubmittedAt: 1 });
 ClientSchema.index({ isVerified: 1 });
 ClientSchema.index({ verifiedAt: 1 });
 ClientSchema.index({ blocked: 1 });
