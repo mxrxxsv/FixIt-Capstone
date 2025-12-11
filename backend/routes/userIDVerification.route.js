@@ -147,8 +147,8 @@ const validateUploadRequest = (req, res, next) => {
 
 /**
  * @route   POST /id-verification/upload-id-picture
- * @desc    Upload ID picture for verification (Workers only)
- * @access  Private (Authenticated workers only)
+ * @desc    Upload ID picture for verification (Workers & Clients)
+ * @access  Private (Authenticated workers/clients)
  * @body    multipart/form-data: { image: File, userId: String }
  */
 router.post(
@@ -163,8 +163,8 @@ router.post(
 
 /**
  * @route   POST /id-verification/upload-selfie
- * @desc    Upload selfie picture for verification (Workers only)
- * @access  Private (Authenticated workers only)
+ * @desc    Upload selfie picture for verification (Workers & Clients)
+ * @access  Private (Authenticated workers/clients)
  * @body    multipart/form-data: { image: File, userId: String }
  */
 router.post(
@@ -178,9 +178,19 @@ router.post(
 );
 
 /**
+ * @route   GET /id-verification/status
+ * @desc    Get the authenticated user's ID verification status
+ * @access  Private (Workers & Clients)
+ */
+router.get("/status", statusRateLimit, verifyToken, (req, res, next) => {
+  req.params.userId = req.user?.id;
+  return getVerificationStatus(req, res, next);
+});
+
+/**
  * @route   GET /id-verification/status/:userId
- * @desc    Get worker's ID verification status and documents
- * @access  Private (Authenticated workers only)
+ * @desc    Get a user's ID verification status and documents
+ * @access  Private (Workers & Clients)
  * @params  userId: String (MongoDB ObjectId)
  */
 router.get(
@@ -338,9 +348,9 @@ router.get("/health", (req, res) => {
     endpoints: {
       public: ["GET /health - Health check"],
       user: [
-        "POST /upload-id-picture - Upload ID picture (Workers only)",
-        "POST /upload-selfie - Upload selfie picture (Workers only)",
-        "GET /status/:userId - Get verification status (Workers only)",
+        "POST /upload-id-picture - Upload ID picture (Workers & Clients)",
+        "POST /upload-selfie - Upload selfie picture (Workers & Clients)",
+        "GET /status/:userId - Get verification status (Workers & Clients)",
       ],
       admin: [
         "GET /admin/pending - Get pending verifications",
@@ -350,7 +360,7 @@ router.get("/health", (req, res) => {
       ],
     },
     features: {
-      supportedUserTypes: ["Workers"],
+    supportedUserTypes: ["Workers", "Clients"],
       fileTypes: ["JPEG", "JPG", "PNG", "WebP", "GIF"],
       maxFileSize: "10MB",
       storage: "Cloudinary",

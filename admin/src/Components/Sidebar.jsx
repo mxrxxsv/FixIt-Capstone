@@ -231,7 +231,7 @@ const Sidebar = () => {
                       >
                         <path d="M6 2a2 2 0 0 0-2 2v16l8-4 8 4V4a2 2 0 0 0-2-2H6Z" />
                       </svg>
-                      <span>Pending Jobs</span>
+                      <span>Jobs</span>
                     </Link>
                   </li>
                 </ul>

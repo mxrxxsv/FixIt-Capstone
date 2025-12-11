@@ -86,6 +86,37 @@ const FindWork = () => {
   // NEW: UI-styled feedback modal (matches WorkerPortfolio)
   const [feedback, setFeedback] = useState({ show: false, message: "" });
 
+  const requiresClientVerification =
+    user?.userType === "client" && !user?.isVerified;
+
+  const handleIdStatusChange = (nextStatus) => {
+    if (!nextStatus) {
+      return;
+    }
+
+    setUser((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        isVerified:
+          typeof nextStatus.isVerified === "boolean"
+            ? nextStatus.isVerified
+            : prev.isVerified,
+        idPictureId:
+          nextStatus.documents?.idPicture?.id || prev.idPictureId || null,
+        selfiePictureId:
+          nextStatus.documents?.selfie?.id || prev.selfiePictureId || null,
+      };
+    });
+
+    if (
+      nextStatus.isVerified ||
+      (nextStatus.hasCompleteVerification && user?.userType === "worker")
+    ) {
+      setShowIdSetup(false);
+    }
+  };
+
   // NEW: Reset form helper
   const resetForm = () => {
     setNewJob({ description: "", location: "", priceOffer: "" });
@@ -266,6 +297,15 @@ const FindWork = () => {
   const handlePostJob = async (e) => {
     e.preventDefault();
 
+    if (requiresClientVerification) {
+      setFeedback({
+        show: true,
+        message: "Please verify your identity before posting a job.",
+      });
+      setShowIdSetup(true);
+      return;
+    }
+
     // Client-side validation aligned with backend rules (Joi):
     const desc = (newJob.description || '').trim();
     const loc = (newJob.location || '').trim();
@@ -415,9 +455,16 @@ const FindWork = () => {
 
           if (!userData.idPictureId && !userData.selfiePictureId) {
             setShowIdSetup(true);
+          } else {
+            setShowIdSetup(false);
           }
         } else {
           setShowPortfolioSetup(false);
+          if (userData?.userType === "client") {
+            setShowIdSetup(!userData.isVerified);
+          } else {
+            setShowIdSetup(false);
+          }
         }
       } catch (err) {
         console.error("Auth check failed", err);
@@ -773,8 +820,16 @@ const FindWork = () => {
       {/* Post Box */}
       {user?.userType === "client" && (
         <div
-          onClick={() => setIsModalOpen(true)}
-          className="bg-white shadow rounded-[20px] p-4 mb-4 cursor-pointer hover:shadow-md transition"
+          onClick={() => {
+            if (requiresClientVerification) {
+              setShowIdSetup(true);
+              return;
+            }
+            setIsModalOpen(true);
+          }}
+          className={`bg-white shadow rounded-[20px] p-4 mb-4 cursor-pointer hover:shadow-md transition ${
+            requiresClientVerification ? "ring-1 ring-yellow-300" : ""
+          }`}
         >
           <div className="flex items-center gap-3">
             <img
@@ -783,8 +838,14 @@ const FindWork = () => {
               className="w-10 h-10 rounded-full object-cover"
             />
 
-            <div className="flex-1 bg-gray-100 px-4 py-2 rounded-full text-gray-500 text-left">
-              Post a work...
+            <div
+              className={`flex-1 bg-gray-100 px-4 py-2 rounded-full text-left ${
+                requiresClientVerification ? "text-amber-700" : "text-gray-500"
+              }`}
+            >
+              {requiresClientVerification
+                ? "Verify your ID to post"
+                : "Post a work..."}
             </div>
           </div>
         </div>
@@ -963,7 +1024,12 @@ const FindWork = () => {
         )}
 
       {/* ID Setup Modal */}
-      {showIdSetup && <IDSetup onClose={() => setShowIdSetup(false)} />}
+      {showIdSetup && (
+        <IDSetup
+          onClose={() => setShowIdSetup(false)}
+          onStatusChange={handleIdStatusChange}
+        />
+      )}
 
       {/* Show Portfolio Setup */}
       {showPortfolioSetup && (

@@ -27,12 +27,15 @@ const Verification = () => {
   const [rejectionReason, setRejectionReason] = useState("");
   // const [verificationNotes, setVerificationNotes] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [userTypeFilter, setUserTypeFilter] = useState("client");
+  const isWorkerView = userTypeFilter === "worker";
+  const summaryLabel = isWorkerView ? "Pending" : "Client submissions";
 
   // Fetch pending verifications
-  const fetchPending = async () => {
+  const fetchPending = async (type = userTypeFilter) => {
     try {
       setLoading(true);
-      const { data } = await getPendingVerifications();
+      const { data } = await getPendingVerifications({ userType: type });
       const mappedData = (data.data.verifications || []).map((v) => ({
         ...v,
         selfieUrl: v.selfie?.url || null,
@@ -49,12 +52,12 @@ const Verification = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchPending();
+    await fetchPending(userTypeFilter);
     setRefreshing(false);
   };
 
   const handleApproveWorker = async () => {
-    if (!selectedWorker) return;
+    if (!selectedWorker || selectedWorker.userType !== "worker") return;
     try {
       setActionLoading(true);
       await approveVerification(selectedWorker.credentialId);
@@ -74,7 +77,7 @@ const Verification = () => {
   };
 
   const handleRejectWorker = async () => {
-    if (!selectedWorker) return;
+    if (!selectedWorker || selectedWorker.userType !== "worker") return;
 
     const reason = rejectionReason.trim();
     if (!reason) {
@@ -131,8 +134,8 @@ const Verification = () => {
       : "N/A";
 
   useEffect(() => {
-    fetchPending();
-  }, []);
+    fetchPending(userTypeFilter);
+  }, [userTypeFilter]);
 
   return (
     <div className="p-4 sm:ml-64 overflow-hidden">
@@ -143,13 +146,39 @@ const Verification = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <Shield className="h-6 w-6 text-blue-600" />
-                Worker Verification Dashboard
+                {isWorkerView
+                  ? "Worker Verification Dashboard"
+                  : "Client Verification Viewer"}
               </h1>
               <p className="text-gray-600 mt-1">
-                Review and verify worker identification documents
+                {isWorkerView
+                  ? "Review and verify worker identification documents"
+                  : "Clients are automatically verified when documents are submitted. Use this view to audit their uploads."}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setUserTypeFilter("worker")}
+                  className={`px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isWorkerView
+                      ? "bg-[#55b3f3] text-white"
+                      : "bg-white text-gray-600"
+                    }`}
+                >
+                  Workers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserTypeFilter("client")}
+                  className={`px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${!isWorkerView
+                      ? "bg-[#55b3f3] text-white"
+                      : "bg-white text-gray-600"
+                    }`}
+                >
+                  Clients
+                </button>
+              </div>
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -177,9 +206,11 @@ const Verification = () => {
             </div>
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-orange-500" />
+                <Clock
+                  className={`h-4 w-4 ${isWorkerView ? "text-orange-500" : "text-green-500"}`}
+                />
                 <span className="text-gray-600">
-                  Pending:{" "}
+                  {summaryLabel}:{" "}
                   <span className="font-semibold">
                     {pendingVerifications.length}
                   </span>
@@ -214,7 +245,7 @@ const Verification = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Worker
+                      {isWorkerView ? "Worker" : "Client"}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Email
@@ -226,66 +257,67 @@ const Verification = () => {
                       Submitted
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
+                      {isWorkerView ? "Actions" : "Details"}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredVerifications.map((worker) => (
-                    <tr key={worker._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                              <User className="h-5 w-5 text-blue-600" />
+                  {filteredVerifications.map((worker) => {
+                    const normalizedStatus = (worker.verificationStatus || "").toLowerCase();
+                    const isApproved = normalizedStatus === "approved";
+                    const statusClass = isApproved
+                      ? "bg-green-100 text-green-700"
+                      : "bg-orange-100 text-orange-800";
+                    const StatusIcon = isApproved ? Check : Clock;
+
+                    return (
+                      <tr key={worker._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                <User className="h-5 w-5 text-blue-600" />
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {worker.fullName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                ID: {worker.credentialId?.slice(-8)}
+                              </div>
                             </div>
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {worker.fullName}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              ID: {worker.credentialId?.slice(-8)}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {worker.email || "N/A"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {worker.verificationStatus}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(worker.idVerificationSubmittedAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {/* <button
-                          onClick={() => {
-                            setSelectedWorker(worker);
-                            setShowModal(true);
-                          }}
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-900 transition-colors cursor-pointer"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View Details
-                        </button> */}
-                        <button
-                          onClick={() => {
-                            setSelectedWorker(worker);
-                            setShowModal(true);
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-[#55b3f3] text-white rounded hover:bg-sky-600 transition-colors cursor-pointer"
-                        >
-                          <Eye className="w-3 h-3" />
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {worker.email || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}`}
+                          >
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {worker.verificationStatus}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDate(worker.idVerificationSubmittedAt)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => {
+                              setSelectedWorker(worker);
+                              setShowModal(true);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-[#55b3f3] text-white rounded hover:bg-sky-600 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -297,6 +329,7 @@ const Verification = () => {
       {showModal && selectedWorker && (
         <VerificationModal
           worker={selectedWorker}
+          allowActions={isWorkerView}
           showRejectModal={showRejectModal}
           setShowRejectModal={setShowRejectModal}
           // verificationNotes={verificationNotes}
@@ -321,6 +354,7 @@ const Verification = () => {
 // Modal Component
 const VerificationModal = ({
   worker,
+  allowActions,
   showRejectModal,
   setShowRejectModal,
   // verificationNotes,
@@ -374,55 +408,56 @@ const VerificationModal = ({
 
         {/* Notes & Actions */}
         <div className="p-6 border-t border-gray-200 flex flex-col gap-4">
-          {/* <textarea
-            value={verificationNotes}
-            onChange={(e) => setVerificationNotes(e.target.value)}
-            placeholder="Add verification notes (optional)..."
-            className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          /> */}
-
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={onApprove}
-              disabled={actionLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              Approve
-            </button>
-            <button
-              onClick={() => setShowRejectModal(true)}
-              disabled={actionLoading}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              Reject
-            </button>
-          </div>
-
-          {/* Reject reason modal */}
-          {showRejectModal && (
-            <div className="mt-4 p-4 border border-red-300 rounded-lg bg-red-50 flex flex-col gap-2">
-              <textarea
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Enter rejection reason..."
-                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              />
+          {allowActions ? (
+            <>
               <div className="flex gap-2 justify-end">
                 <button
-                  onClick={() => setShowRejectModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  onClick={onApprove}
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  Cancel
+                  Approve
                 </button>
                 <button
-                  onClick={onReject}
-                  disabled={actionLoading || !canReject}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  onClick={() => setShowRejectModal(true)}
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  Confirm Reject
+                  Reject
                 </button>
               </div>
-            </div>
+
+              {showRejectModal && (
+                <div className="mt-4 p-4 border border-red-300 rounded-lg bg-red-50 flex flex-col gap-2">
+                  <textarea
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Enter rejection reason..."
+                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setShowRejectModal(false)}
+                      className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={onReject}
+                      disabled={actionLoading || !canReject}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      Confirm Reject
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-600">
+              Clients are automatically verified once both documents are uploaded.
+              This section is read-only for record keeping.
+            </p>
           )}
         </div>
       </div>

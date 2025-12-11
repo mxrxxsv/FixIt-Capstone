@@ -12,7 +12,8 @@ verificationApi.interceptors.request.use((config) => {
   return config;
 });
 
-export const getPendingVerifications = () => verificationApi.get("/pending");
+export const getPendingVerifications = (params = {}) =>
+  verificationApi.get("/pending", { params });
 
 export const approveVerification = (userId, requireResubmission = false) =>
   verificationApi.post(`/approve/${userId}`, { requireResubmission });

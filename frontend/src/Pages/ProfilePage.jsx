@@ -29,6 +29,7 @@ import AddEducation from "../components/AddEducation";
 import BiographyModal from "../components/BiographyModal";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import AddressInput from "../components/AddressInput";
+import IDSetup from "../components/IDSetup";
 
 const formatAddress = (address) => {
   if (!address || typeof address !== "object") return "Unknown";
@@ -146,6 +147,7 @@ const ProfilePage = () => {
   const [isEditMode, setIsEditMode] = useState(false);
 
   const [isBioModalOpen, setIsBioModalOpen] = useState(false);
+  const [showIdSetup, setShowIdSetup] = useState(false);
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteAction, setDeleteAction] = useState(null);
@@ -249,6 +251,15 @@ const ProfilePage = () => {
       setIsBioModalOpen(false);
     } catch (err) {
       console.error("Failed to update biography:", err);
+    }
+  };
+
+  const handleVerificationStatusChange = async () => {
+    try {
+      const res = await getProfile();
+      setCurrentUser(res.data.data);
+    } catch (err) {
+      console.error("Failed to refresh verification status:", err);
     }
   };
 
@@ -485,6 +496,9 @@ const ProfilePage = () => {
   const { userType, fullName, image, address, biography } = currentUser;
   const verificationMeta = deriveVerificationMeta(currentUser);
   const VerificationIcon = verificationMeta.icon;
+  const isClient = userType === "client";
+  const needsClientVerification =
+    isClient && verificationMeta.label !== "Verified";
 
   return (
     <div className="max-w-6xl mx-auto p-6 mt-[100px]">
@@ -523,14 +537,30 @@ const ProfilePage = () => {
               {userType === "client" ? "Client" : "Worker"}
             </span>
             {VerificationIcon && (
-              <span
-                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${verificationMeta.badgeClass}`}
-              >
-                <VerificationIcon className="w-3 h-3" />
-                {verificationMeta.label}
-              </span>
+              needsClientVerification ? (
+                <button
+                  type="button"
+                  onClick={() => setShowIdSetup(true)}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${verificationMeta.badgeClass} border border-transparent hover:ring-2 hover:ring-blue-100 transition-colors cursor-pointer`}
+                >
+                  <VerificationIcon className="w-3 h-3" />
+                  Verify identity
+                </button>
+              ) : (
+                <span
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${verificationMeta.badgeClass}`}
+                >
+                  <VerificationIcon className="w-3 h-3" />
+                  {verificationMeta.label}
+                </span>
+              )
             )}
           </div>
+          {needsClientVerification && (
+            <p className="text-xs text-amber-600 mt-1">
+              {verificationMeta.helperText}
+            </p>
+          )}
 
           {userType === "worker" && (
             <div className="relative mt-4">
@@ -615,7 +645,7 @@ const ProfilePage = () => {
                       {post.status && (
                         <span
                           className={`px-3 py-1 rounded-full text-xs shadow-sm ${((post.status || "").toLowerCase() === "open" &&
-                              "bg-green-100 text-green-600") ||
+                            "bg-green-100 text-green-600") ||
                             ((post.status || "").toLowerCase() === "hired" &&
                               "bg-yellow-100 text-yellow-700") ||
                             ((post.status || "").toLowerCase() ===
@@ -731,8 +761,8 @@ const ProfilePage = () => {
                     onClick={() => setIsDeleteConfirmOpen(false)}
                     disabled={isJobDeleting}
                     className={`px-4 py-2 ${isJobDeleting
-                        ? "text-gray-300 cursor-not-allowed"
-                        : "text-gray-500 hover:text-gray-700"
+                      ? "text-gray-300 cursor-not-allowed"
+                      : "text-gray-500 hover:text-gray-700"
                       }`}
                   >
                     Cancel
@@ -741,8 +771,8 @@ const ProfilePage = () => {
                     onClick={handleDeleteJob}
                     disabled={isJobDeleting}
                     className={`px-4 py-2 rounded-lg ${isJobDeleting
-                        ? "bg-red-300 cursor-not-allowed"
-                        : "bg-red-500 hover:bg-red-600"
+                      ? "bg-red-300 cursor-not-allowed"
+                      : "bg-red-500 hover:bg-red-600"
                       } text-white`}
                   >
                     {isJobDeleting ? "Deleting..." : "Delete"}
@@ -768,8 +798,8 @@ const ProfilePage = () => {
                     onClick={() => setIsUpdateConfirmOpen(false)}
                     disabled={isJobUpdating}
                     className={`px-4 py-2 ${isJobUpdating
-                        ? "text-gray-300 cursor-not-allowed"
-                        : "text-gray-500 hover:text-gray-700"
+                      ? "text-gray-300 cursor-not-allowed"
+                      : "text-gray-500 hover:text-gray-700"
                       }`}
                   >
                     Cancel
@@ -778,8 +808,8 @@ const ProfilePage = () => {
                     onClick={handleUpdateJob}
                     disabled={isJobUpdating}
                     className={`px-4 py-2 rounded-lg ${isJobUpdating
-                        ? "bg-blue-300 cursor-not-allowed"
-                        : "bg-blue-500 hover:bg-blue-600"
+                      ? "bg-blue-300 cursor-not-allowed"
+                      : "bg-blue-500 hover:bg-blue-600"
                       } text-white`}
                   >
                     {isJobUpdating ? "Saving..." : "Confirm"}
@@ -787,6 +817,13 @@ const ProfilePage = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {showIdSetup && (
+            <IDSetup
+              onClose={() => setShowIdSetup(false)}
+              onStatusChange={handleVerificationStatusChange}
+            />
           )}
         </>
       ) : (
@@ -1198,7 +1235,7 @@ const ProfilePage = () => {
 
       {/* Modal for profile picture */}
       {isModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]">
           <div className="bg-white rounded-2xl p-6 w-96 relative shadow-lg">
             <button
               className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 cursor-pointer"

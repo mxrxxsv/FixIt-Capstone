@@ -150,7 +150,7 @@ const ApplicationsPage = () => {
     try {
       await respondToApplication(applicationId, { action });
       // Refresh applications to get updated status
-  const user = await getProfile();
+      const user = await getProfile();
       let response;
       if (user.data.data.userType === "worker") {
         response = await getWorkerApplications();
@@ -182,7 +182,7 @@ const ApplicationsPage = () => {
       const response = await startApplicationDiscussion(applicationId);
 
       // Refresh applications
-  const user = await getProfile();
+      const user = await getProfile();
       let appsResponse;
       if (user.data.data.userType === "worker") {
         appsResponse = await getWorkerApplications();
@@ -272,7 +272,7 @@ const ApplicationsPage = () => {
       const response = await markApplicationAgreement(applicationId, agreed);
 
       // Refresh applications
-  const user = await getProfile();
+      const user = await getProfile();
       let appsResponse;
       if (user.data.data.userType === "worker") {
         appsResponse = await getWorkerApplications();
@@ -321,7 +321,7 @@ const ApplicationsPage = () => {
       await respondToInvitation(invitationId, { action });
 
       // Refresh invitations to get updated status
-  const user = await getProfile();
+      const user = await getProfile();
       let response;
       if (user.data.data.userType === "worker") {
         response = await getMyInvitations();
@@ -358,7 +358,7 @@ const ApplicationsPage = () => {
       const response = await startInvitationDiscussion(invitationId);
 
       // Refresh invitations
-  const user = await getProfile();
+      const user = await getProfile();
       let invitationsResponse;
       if (user.data.data.userType === "worker") {
         invitationsResponse = await getMyInvitations();
@@ -588,7 +588,7 @@ const ApplicationsPage = () => {
             "chat:includeAgreementContext",
             includeAgreement ? "1" : "0"
           );
-        } catch (_) {}
+        } catch (_) { }
         navigate("/chat");
       } else {
         // Last resort: open chat without a pre-selected target but preserve context
@@ -597,7 +597,7 @@ const ApplicationsPage = () => {
             "chat:includeAgreementContext",
             includeAgreement ? "1" : "0"
           );
-        } catch (_) {}
+        } catch (_) { }
         navigate("/chat");
       }
     } catch (e) {
@@ -756,7 +756,7 @@ const ApplicationsPage = () => {
       const response = await markInvitationAgreement(invitationId, { agreed });
 
       // Refresh invitations
-  const user = await getProfile();
+      const user = await getProfile();
       let invitationsResponse;
       if (user.data.data.userType === "worker") {
         invitationsResponse = await getMyInvitations();
@@ -838,8 +838,8 @@ const ApplicationsPage = () => {
         <button
           onClick={() => setActiveTab("applications")}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "applications"
-              ? "bg-white text-[#55b3f3] shadow-sm"
-              : "text-gray-600 hover:text-gray-800 cursor-pointer"
+            ? "bg-white text-[#55b3f3] shadow-sm"
+            : "text-gray-600 hover:text-gray-800 cursor-pointer"
             }`}
         >
           Applications ({applications.length})
@@ -847,8 +847,8 @@ const ApplicationsPage = () => {
         <button
           onClick={() => setActiveTab("invitations")}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === "invitations"
-              ? "bg-white text-[#55b3f3] shadow-sm"
-              : "text-gray-600 hover:text-gray-800 cursor-pointer"
+            ? "bg-white text-[#55b3f3] shadow-sm"
+            : "text-gray-600 hover:text-gray-800 cursor-pointer"
             }`}
         >
           {userType === "worker" ? "Invitations Received" : "Invitations Sent"}{" "}
@@ -930,15 +930,15 @@ const ApplicationsPage = () => {
                           openChatForApplicationItem(app);
                       }}
                       className={`px-2 py-1 sm:px-3 rounded-lg text-xs sm:text-sm font-medium ${app.applicationStatus === "accepted"
-                          ? "bg-green-100 text-green-600"
-                          : app.applicationStatus === "rejected"
-                            ? "bg-red-100 text-red-600"
-                            : app.applicationStatus === "in_discussion"
-                              ? "bg-blue-100 text-blue-600"
-                              : app.applicationStatus === "client_agreed" ||
-                                app.applicationStatus === "worker_agreed"
-                                ? "bg-yellow-100 text-yellow-600"
-                                : "bg-gray-100 text-gray-600"
+                        ? "bg-green-100 text-green-600"
+                        : app.applicationStatus === "rejected"
+                          ? "bg-red-100 text-red-600"
+                          : app.applicationStatus === "in_discussion"
+                            ? "bg-blue-100 text-blue-600"
+                            : app.applicationStatus === "client_agreed" ||
+                              app.applicationStatus === "worker_agreed"
+                              ? "bg-yellow-100 text-yellow-600"
+                              : "bg-gray-100 text-gray-600"
                         }`}
                     >
                       {app.applicationStatus === "pending"
@@ -1051,17 +1051,17 @@ const ApplicationsPage = () => {
                           openChatForInvitationItem(invitation);
                       }}
                       className={`px-2 py-1 rounded-full text-xs font-medium ${invitation.invitationStatus === "pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : invitation.invitationStatus === "accepted" ||
-                            invitation.invitationStatus === "both_agreed"
-                            ? "bg-green-100 text-green-800"
-                            : invitation.invitationStatus === "rejected"
-                              ? "bg-red-100 text-red-800"
-                              : invitation.invitationStatus === "in_discussion" ||
-                                invitation.invitationStatus === "client_agreed" ||
-                                invitation.invitationStatus === "worker_agreed"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-800"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : invitation.invitationStatus === "accepted" ||
+                          invitation.invitationStatus === "both_agreed"
+                          ? "bg-green-100 text-green-800"
+                          : invitation.invitationStatus === "rejected"
+                            ? "bg-red-100 text-red-800"
+                            : invitation.invitationStatus === "in_discussion" ||
+                              invitation.invitationStatus === "client_agreed" ||
+                              invitation.invitationStatus === "worker_agreed"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
                         }`}
                     >
                       {invitation.invitationStatus === "pending"
@@ -1153,15 +1153,15 @@ const ApplicationsPage = () => {
                         Status:{" "}
                         <span
                           className={`font-medium ${selectedApp.applicationStatus === "accepted"
-                              ? "text-green-600"
-                              : selectedApp.applicationStatus === "rejected"
-                                ? "text-red-600"
-                                : selectedApp.applicationStatus === "in_discussion"
-                                  ? "text-blue-600"
-                                  : selectedApp.applicationStatus === "client_agreed" ||
-                                    selectedApp.applicationStatus === "worker_agreed"
-                                    ? "text-yellow-600"
-                                    : "text-gray-600"
+                            ? "text-green-600"
+                            : selectedApp.applicationStatus === "rejected"
+                              ? "text-red-600"
+                              : selectedApp.applicationStatus === "in_discussion"
+                                ? "text-blue-600"
+                                : selectedApp.applicationStatus === "client_agreed" ||
+                                  selectedApp.applicationStatus === "worker_agreed"
+                                  ? "text-yellow-600"
+                                  : "text-gray-600"
                             }`}
                         >
                           {selectedApp.applicationStatus === "in_discussion"
@@ -1338,7 +1338,7 @@ const ApplicationsPage = () => {
 
       {/* Modal for Invitation Details */}
       {selectedInvitation && (
-  <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-40 flex items-center justify-center z-[2000] px-3">
+        <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-40 flex items-center justify-center z-[2000] px-3">
           <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-6 w-full max-w-md sm:max-w-lg relative">
             <button
               onClick={() => setSelectedInvitation(null)}
@@ -1442,19 +1442,19 @@ const ApplicationsPage = () => {
               <div className="flex justify-start">
                 <span
                   className={`px-3 py-1 rounded-full text-sm font-medium ${selectedInvitation.invitationStatus === "pending"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : selectedInvitation.invitationStatus === "accepted" ||
-                        selectedInvitation.invitationStatus === "both_agreed"
-                        ? "bg-green-100 text-green-800"
-                        : selectedInvitation.invitationStatus === "rejected"
-                          ? "bg-red-100 text-red-800"
-                          : selectedInvitation.invitationStatus ===
-                            "in_discussion" ||
-                            selectedInvitation.invitationStatus ===
-                            "client_agreed" ||
-                            selectedInvitation.invitationStatus === "worker_agreed"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-gray-100 text-gray-800"
+                    ? "bg-yellow-100 text-yellow-800"
+                    : selectedInvitation.invitationStatus === "accepted" ||
+                      selectedInvitation.invitationStatus === "both_agreed"
+                      ? "bg-green-100 text-green-800"
+                      : selectedInvitation.invitationStatus === "rejected"
+                        ? "bg-red-100 text-red-800"
+                        : selectedInvitation.invitationStatus ===
+                          "in_discussion" ||
+                          selectedInvitation.invitationStatus ===
+                          "client_agreed" ||
+                          selectedInvitation.invitationStatus === "worker_agreed"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-gray-100 text-gray-800"
                     }`}
                 >
                   {selectedInvitation.invitationStatus === "pending"
@@ -1641,7 +1641,7 @@ const ApplicationsPage = () => {
 
       {/* Notice Modal */}
       {notice?.open && (
-  <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-40 flex items-center justify-center z-[2000] px-3">
+        <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-40 flex items-center justify-center z-[2000] px-3">
           <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-6 w-full max-w-sm relative">
             <button
               onClick={() => setNotice({ open: false, title: "", message: "", variant: "info" })}

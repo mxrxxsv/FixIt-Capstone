@@ -30,7 +30,8 @@ export const uploadSelfie = async (userId, file) => {
 };
 
 
-export const getVerificationStatus = async () => {
-  const { data } = await API.get("/status");
+export const getVerificationStatus = async (userId) => {
+  const endpoint = userId ? `/status/${userId}` : "/status";
+  const { data } = await API.get(endpoint);
   return data;
 };

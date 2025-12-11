@@ -6,6 +6,7 @@ const IDPicture = require("../models/IdPicture");
 const Selfie = require("../models/Selfie");
 const Credential = require("../models/Credential");
 const Worker = require("../models/Worker");
+const Client = require("../models/Client");
 const logger = require("../utils/logger");
 const { decryptAES128 } = require("../utils/encipher");
 
@@ -52,33 +53,48 @@ const rejectSchema = Joi.object({
 const getPendingSchema = Joi.object({
   page: Joi.number().integer().min(1).max(1000).default(1),
   limit: Joi.number().integer().min(1).max(50).default(10),
-  userType: Joi.string().valid("worker").default("worker"),
+  userType: Joi.string().valid("worker", "client", "all").default("worker"),
   sortBy: Joi.string()
     .valid("submittedAt", "firstName", "lastName", "createdAt")
     .default("submittedAt"),
   order: Joi.string().valid("asc", "desc").default("desc"),
 });
 
+const SUPPORTED_USER_TYPES = new Set(["worker", "client"]);
+
+const resolveUserContext = async (userId, existingCredential = null) => {
+  const credential = existingCredential || (await Credential.findById(userId));
+  if (!credential || !SUPPORTED_USER_TYPES.has(credential.userType)) {
+    return null;
+  }
+
+  const ProfileModel = credential.userType === "worker" ? Worker : Client;
+  const profile = await ProfileModel.findOne({ credentialId: userId });
+  if (!profile) {
+    return null;
+  }
+
+  return { credential, profile, ProfileModel };
+};
+
+const hasBothDocuments = (profile, newIdPictureId, newSelfieId) => {
+  const hasIdPicture = profile.idPictureId || newIdPictureId;
+  const hasSelfie = profile.selfiePictureId || newSelfieId;
+  return Boolean(hasIdPicture && hasSelfie);
+};
+
 // ==================== HELPER FUNCTIONS ====================
 
 const checkBothDocumentsUploaded = async (
   userId,
   newIdPictureId,
-  newSelfieId
+  newSelfieId,
+  userContext = null
 ) => {
   try {
-    const credential = await Credential.findById(userId);
-    if (!credential) return false;
-
-    // Only workers need ID verification
-    if (credential.userType !== "worker") return false;
-
-    const worker = await Worker.findOne({ credentialId: userId });
-    if (!worker) return false;
-
-    const hasIdPicture = worker.idPictureId || newIdPictureId;
-    const hasSelfie = worker.selfiePictureId || newSelfieId;
-    return hasIdPicture && hasSelfie;
+    const context = userContext || (await resolveUserContext(userId));
+    if (!context) return false;
+    return hasBothDocuments(context.profile, newIdPictureId, newSelfieId);
   } catch (error) {
     console.error("Error checking documents:", error);
     return false;
@@ -88,31 +104,55 @@ const checkBothDocumentsUploaded = async (
 const updateUserVerificationStatus = async (
   userId,
   idPictureId,
-  selfiePictureId
+  selfiePictureId,
+  userContext = null
 ) => {
   try {
-    const credential = await Credential.findById(userId);
-    if (!credential) return;
+    const context = userContext || (await resolveUserContext(userId));
+    if (!context) return;
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") return;
-
-    const bothUploaded = await checkBothDocumentsUploaded(
-      userId,
-      idPictureId,
-      selfiePictureId
-    );
-
+    const { credential, profile, ProfileModel } = context;
     const updateData = {};
     if (idPictureId) updateData.idPictureId = idPictureId;
     if (selfiePictureId) updateData.selfiePictureId = selfiePictureId;
 
+    const bothUploaded = hasBothDocuments(
+      profile,
+      idPictureId,
+      selfiePictureId
+    );
+    const hasAnyDocument = Boolean(
+      profile.idPictureId ||
+        profile.selfiePictureId ||
+        idPictureId ||
+        selfiePictureId
+    );
+    const now = new Date();
+
     if (bothUploaded) {
+      updateData.idVerificationSubmittedAt = now;
+      if (credential.userType === "worker") {
+        updateData.verificationStatus = "pending";
+        updateData.idVerificationApprovedAt = null;
+        updateData.idVerificationRejectedAt = null;
+        updateData.approvedByAdminId = null;
+        updateData.rejectedByAdminId = null;
+      } else {
+        updateData.verificationStatus = "approved";
+        updateData.idVerificationApprovedAt = now;
+        updateData.idVerificationRejectedAt = null;
+        updateData.approvedByAdminId = null;
+        updateData.rejectedByAdminId = null;
+        updateData.isVerified = true;
+        updateData.verifiedAt = now;
+      }
+    } else if (hasAnyDocument) {
       updateData.verificationStatus = "pending";
-      updateData.idVerificationSubmittedAt = new Date();
+      updateData.idVerificationSubmittedAt =
+        profile.idVerificationSubmittedAt || now;
     }
 
-    await Worker.findOneAndUpdate({ credentialId: userId }, updateData, {
+    await ProfileModel.findOneAndUpdate({ credentialId: userId }, updateData, {
       new: true,
     });
   } catch (error) {
@@ -146,12 +186,20 @@ const uploadIDPicture = async (req, res) => {
       });
     }
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") {
+    if (!SUPPORTED_USER_TYPES.has(credential.userType)) {
       return res.status(403).json({
         success: false,
-        message: "ID verification is only required for workers",
-        code: "WORKER_ONLY_VERIFICATION",
+        message: "ID verification is only available for workers and clients",
+        code: "UNSUPPORTED_USER_TYPE",
+      });
+    }
+
+    const userContext = await resolveUserContext(userId, credential);
+
+    if (!userContext) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found",
       });
     }
 
@@ -213,14 +261,26 @@ const uploadIDPicture = async (req, res) => {
     console.log("✅ ID Picture saved to database:", newIDPicture._id);
 
     // Update user's verification status
-    await updateUserVerificationStatus(userId, newIDPicture._id, null);
+    await updateUserVerificationStatus(
+      userId,
+      newIDPicture._id,
+      null,
+      userContext
+    );
 
     // Check if both documents are now complete
     const bothComplete = await checkBothDocumentsUploaded(
       userId,
       newIDPicture._id,
-      null
+      null,
+      userContext
     );
+
+    const completionMessage = bothComplete
+      ? credential.userType === "client"
+        ? "Both ID and selfie uploaded. Your account is now verified."
+        : "Both ID and selfie uploaded. Your documents are now under review."
+      : "ID picture uploaded. Please upload your selfie to complete verification.";
 
     res.status(201).json({
       success: true,
@@ -236,9 +296,7 @@ const uploadIDPicture = async (req, res) => {
           uploadedAt: newIDPicture.createdAt,
         },
         verificationComplete: bothComplete,
-        message: bothComplete
-          ? "Both ID and selfie uploaded. Your documents are now under review."
-          : "ID picture uploaded. Please upload your selfie to complete verification.",
+        message: completionMessage,
       },
     });
   } catch (error) {
@@ -286,12 +344,19 @@ const uploadSelfie = async (req, res) => {
       });
     }
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") {
+    if (!SUPPORTED_USER_TYPES.has(credential.userType)) {
       return res.status(403).json({
         success: false,
-        message: "ID verification is only required for workers",
-        code: "WORKER_ONLY_VERIFICATION",
+        message: "ID verification is only available for workers and clients",
+        code: "UNSUPPORTED_USER_TYPE",
+      });
+    }
+
+    const userContext = await resolveUserContext(userId, credential);
+    if (!userContext) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found",
       });
     }
 
@@ -353,14 +418,26 @@ const uploadSelfie = async (req, res) => {
     console.log("✅ Selfie saved to database:", newSelfie._id);
 
     // Update user's verification status
-    await updateUserVerificationStatus(userId, null, newSelfie._id);
+    await updateUserVerificationStatus(
+      userId,
+      null,
+      newSelfie._id,
+      userContext
+    );
 
     // Check if both documents are now complete
     const bothComplete = await checkBothDocumentsUploaded(
       userId,
       null,
-      newSelfie._id
+      newSelfie._id,
+      userContext
     );
+
+    const completionMessage = bothComplete
+      ? credential.userType === "client"
+        ? "Both ID and selfie uploaded. Your account is now verified."
+        : "Both ID and selfie uploaded. Your documents are now under review."
+      : "Selfie uploaded. Please upload your ID picture to complete verification.";
 
     res.status(201).json({
       success: true,
@@ -376,9 +453,7 @@ const uploadSelfie = async (req, res) => {
           uploadedAt: newSelfie.createdAt,
         },
         verificationComplete: bothComplete,
-        message: bothComplete
-          ? "Both ID and selfie uploaded. Your documents are now under review."
-          : "Selfie uploaded. Please upload your ID picture to complete verification.",
+        message: completionMessage,
       },
     });
   } catch (error) {
@@ -405,10 +480,16 @@ const uploadSelfie = async (req, res) => {
 // Get user's verification status
 const getVerificationStatus = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const requestedUserId = req.params.userId || req.user?.id;
 
-    // Validate user ID
-    const { error } = uploadSchema.validate({ userId });
+    if (!requestedUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    const { error } = uploadSchema.validate({ userId: requestedUserId });
     if (error) {
       return res.status(400).json({
         success: false,
@@ -416,66 +497,58 @@ const getVerificationStatus = async (req, res) => {
       });
     }
 
-    // Check if user exists
-    const credential = await Credential.findById(userId);
-    if (!credential) {
+    const context = await resolveUserContext(requestedUserId);
+
+    if (!context) {
+      const credential = await Credential.findById(requestedUserId);
+      if (credential && !SUPPORTED_USER_TYPES.has(credential.userType)) {
+        return res.status(403).json({
+          success: false,
+          message: "ID verification is not enabled for this user type",
+          code: "UNSUPPORTED_USER_TYPE",
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") {
-      return res.status(403).json({
-        success: false,
-        message: "ID verification is only required for workers",
-        code: "WORKER_ONLY_VERIFICATION",
-      });
-    }
-
-    let userProfile;
-    userProfile = await Worker.findOne({ credentialId: userId })
-      .populate("idPictureId")
-      .populate("selfiePictureId");
-
-    if (!userProfile) {
-      return res.status(404).json({
-        success: false,
-        message: "User profile not found",
-      });
-    }
+    const { credential, profile } = context;
+    await profile.populate(["idPictureId", "selfiePictureId"]);
 
     res.status(200).json({
       success: true,
       message: "Verification status retrieved successfully",
       data: {
-        verificationStatus: userProfile.verificationStatus,
-        verificationStatusText: userProfile.verificationStatusText,
-        hasIdPicture: !!userProfile.idPictureId,
-        hasSelfie: !!userProfile.selfiePictureId,
-        hasCompleteVerification: userProfile.hasCompleteIdVerification,
-        canResubmit: userProfile.canResubmit,
-        submittedAt: userProfile.idVerificationSubmittedAt,
-        approvedAt: userProfile.idVerificationApprovedAt,
-        rejectedAt: userProfile.idVerificationRejectedAt,
-        isVerified: userProfile.isVerified,
-        verifiedAt: userProfile.verifiedAt,
+        userType: credential.userType,
+        verificationStatus: profile.verificationStatus,
+        verificationStatusText: profile.verificationStatusText,
+        hasIdPicture: !!profile.idPictureId,
+        hasSelfie: !!profile.selfiePictureId,
+        hasCompleteVerification: profile.hasCompleteIdVerification,
+        canResubmit: profile.canResubmit,
+        submittedAt: profile.idVerificationSubmittedAt,
+        approvedAt: profile.idVerificationApprovedAt,
+        rejectedAt: profile.idVerificationRejectedAt,
+        isVerified: profile.isVerified,
+        verifiedAt: profile.verifiedAt,
         documents: {
-          idPicture: userProfile.idPictureId
+          idPicture: profile.idPictureId
             ? {
-                id: userProfile.idPictureId._id,
-                url: userProfile.idPictureId.url,
-                uploadedAt: userProfile.idPictureId.createdAt,
-                status: userProfile.idPictureId.verificationStatus,
+                id: profile.idPictureId._id,
+                url: profile.idPictureId.url,
+                uploadedAt: profile.idPictureId.createdAt,
+                status: profile.idPictureId.verificationStatus,
               }
             : null,
-          selfie: userProfile.selfiePictureId
+          selfie: profile.selfiePictureId
             ? {
-                id: userProfile.selfiePictureId._id,
-                url: userProfile.selfiePictureId.url,
-                uploadedAt: userProfile.selfiePictureId.createdAt,
-                status: userProfile.selfiePictureId.verificationStatus,
+                id: profile.selfiePictureId._id,
+                url: profile.selfiePictureId.url,
+                uploadedAt: profile.selfiePictureId.createdAt,
+                status: profile.selfiePictureId.verificationStatus,
               }
             : null,
         },
@@ -513,15 +586,22 @@ const getPendingVerifications = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Build aggregation pipeline for both workers and clients
-    const buildPipeline = (collection, type) => [
-      // Match pending verifications with complete documents
-      {
-        $match: {
-          verificationStatus: "pending",
-          idPictureId: { $ne: null },
-          selfiePictureId: { $ne: null },
+    const buildPipeline = (type) => {
+      const matchStage = {
+        idPictureId: { $ne: null },
+        selfiePictureId: { $ne: null },
+      };
+
+      if (type === "worker") {
+        matchStage.verificationStatus = "pending";
+      } else if (type === "client") {
+        matchStage.verificationStatus = { $in: ["pending", "approved"] };
+      }
+
+      return [
+        {
+          $match: matchStage,
         },
-      },
       // Join with credentials
       {
         $lookup: {
@@ -601,17 +681,25 @@ const getPendingVerifications = async (req, res) => {
             },
           },
           createdAt: 1,
+          isVerified: 1,
         },
       },
     ];
+    };
 
     // Get pending verifications
     let aggregationPromises = [];
 
-    // Only workers need ID verification
-    aggregationPromises.push(
-      Worker.aggregate(buildPipeline("workers", "worker"))
-    );
+    const includeWorkers = userType === "worker" || userType === "all";
+    const includeClients = userType === "client" || userType === "all";
+
+    if (includeWorkers) {
+      aggregationPromises.push(Worker.aggregate(buildPipeline("worker")));
+    }
+
+    if (includeClients) {
+      aggregationPromises.push(Client.aggregate(buildPipeline("client")));
+    }
 
     const results = await Promise.all(aggregationPromises);
     let allPendingVerifications = [];
@@ -682,9 +770,17 @@ const getPendingVerifications = async (req, res) => {
     const totalPages = Math.ceil(totalItems / limit);
 
     // Get statistics
+    const workerCount = decryptedVerifications.filter(
+      (item) => item.userType === "worker"
+    ).length;
+    const clientCount = decryptedVerifications.filter(
+      (item) => item.userType === "client"
+    ).length;
+
     const stats = {
       total: totalItems,
-      workers: totalItems, // All are workers now
+      workers: workerCount,
+      clients: clientCount,
     };
 
     const processingTime = Date.now() - startTime;

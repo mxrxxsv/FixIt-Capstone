@@ -445,8 +445,14 @@ const createClientProfile = async (pending, credentialId, session) => {
       },
       education: [],
       blocked: false,
-      isVerified: true,
-      verifiedAt: new Date(),
+      idPictureId: null,
+      selfiePictureId: null,
+      verificationStatus: "not_submitted",
+      idVerificationSubmittedAt: null,
+      idVerificationApprovedAt: null,
+      idVerificationRejectedAt: null,
+      isVerified: false,
+      verifiedAt: null,
     });
 
     await clientProfile.save({ session });
@@ -1002,8 +1008,6 @@ const verify = async (req, res) => {
         attemptsLeft: ATTEMPT_LIMIT - pending.verifyAttempts,
       });
     }
-
-    const isVerified = userType === "client"; // Clients are automatically verified, workers need ID verification
 
     // ✅ Move to Credential collection
     const credential = new Credential({

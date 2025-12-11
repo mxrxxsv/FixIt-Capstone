@@ -157,31 +157,31 @@ const ContractManagement = () => {
             case "in_progress":
               return role === "client"
                 ? {
-                    type: "info",
-                    title: "Work Started",
-                    message:
-                      "The worker has started working on your contract.",
-                  }
+                  type: "info",
+                  title: "Work Started",
+                  message:
+                    "The worker has started working on your contract.",
+                }
                 : {
-                    type: "info",
-                    title: "Work Started",
-                    message:
-                      "You can now continue working on this contract.",
-                  };
+                  type: "info",
+                  title: "Work Started",
+                  message:
+                    "You can now continue working on this contract.",
+                };
             case "awaiting_client_confirmation":
               return role === "client"
                 ? {
-                    type: "info",
-                    title: "Review Required",
-                    message:
-                      "The worker marked work as completed. Please confirm completion.",
-                  }
+                  type: "info",
+                  title: "Review Required",
+                  message:
+                    "The worker marked work as completed. Please confirm completion.",
+                }
                 : {
-                    type: "info",
-                    title: "Waiting for Confirmation",
-                    message:
-                      "Work marked as completed. Waiting for client confirmation.",
-                  };
+                  type: "info",
+                  title: "Waiting for Confirmation",
+                  message:
+                    "Work marked as completed. Waiting for client confirmation.",
+                };
             case "completed":
               return {
                 type: "success",
@@ -205,16 +205,16 @@ const ContractManagement = () => {
 
         // Listen for contract lifecycle events; only refresh the list
         socketRef.current.on("contract:created", async () => {
-          try { await refreshContracts(); } catch (_) {}
+          try { await refreshContracts(); } catch (_) { }
         });
 
         socketRef.current.on("contract:updated", async () => {
-          try { await refreshContracts(); } catch (_) {}
+          try { await refreshContracts(); } catch (_) { }
         });
 
         // Note: backend emits `contract:review_submitted` when a review is added
         socketRef.current.on("contract:review_submitted", async () => {
-          try { await refreshContracts(); } catch (_) {}
+          try { await refreshContracts(); } catch (_) { }
         });
       }
 
@@ -224,7 +224,7 @@ const ContractManagement = () => {
           ? await getWorkerContracts()
           : await getClientContracts();
 
-        // Debug logs removed
+      // Debug logs removed
       setContracts(contractsRes || []);
     } catch (error) {
       console.error("Failed to load contracts:", error);
@@ -238,20 +238,20 @@ const ContractManagement = () => {
       try {
         socketRef.current?.disconnect();
       } catch (error) {
-          console.error("Socket disconnect error:", error);
+        console.error("Socket disconnect error:", error);
       }
     };
   }, []);
 
   const handleStartWork = async (contractId) => {
     try {
-        // Debug logs removed
+      // Debug logs removed
       setActionLoading((prev) => ({
         ...prev,
         [contractId]: { ...(prev[contractId] || {}), starting: true },
       }));
       const result = await startWork(contractId);
-        // Debug logs removed
+      // Debug logs removed
       showNotification(
         "success",
         "Work Started",
@@ -275,13 +275,13 @@ const ContractManagement = () => {
 
   const handleCompleteWork = async (contractId) => {
     try {
-        // Debug logs removed
+      // Debug logs removed
       setActionLoading((prev) => ({
         ...prev,
         [contractId]: { ...(prev[contractId] || {}), completing: true },
       }));
       const result = await completeWork(contractId);
-        // Debug logs removed
+      // Debug logs removed
       showNotification(
         "success",
         "Work Completed",
@@ -342,7 +342,7 @@ const ContractManagement = () => {
         return;
       }
 
-        // Debug logs removed
+      // Debug logs removed
       setSubmittingFeedback(true);
       await submitFeedback(feedbackModal.contract._id, {
         rating: feedback.rating,
@@ -581,11 +581,10 @@ const ContractManagement = () => {
                           <button
                             onClick={() => handleStartWork(contract._id)}
                             disabled={!!actionLoading[contract._id]?.starting}
-                            className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-                              actionLoading[contract._id]?.starting
+                            className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${actionLoading[contract._id]?.starting
                                 ? "bg-sky-300 text-white opacity-90 cursor-not-allowed"
                                 : "bg-[#55b3f3] text-white hover:bg-sky-600"
-                            }`}
+                              }`}
                           >
                             {actionLoading[contract._id]?.starting ? (
                               <Loader size={16} className="mr-2 animate-spin" />
@@ -601,11 +600,10 @@ const ContractManagement = () => {
                           <button
                             onClick={() => handleCompleteWork(contract._id)}
                             disabled={!!actionLoading[contract._id]?.completing}
-                            className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-                              actionLoading[contract._id]?.completing
+                            className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${actionLoading[contract._id]?.completing
                                 ? "bg-sky-300 text-white opacity-90 cursor-not-allowed"
                                 : "bg-[#55b3f3] text-white hover:bg-sky-600"
-                            }`}
+                              }`}
                           >
                             {actionLoading[contract._id]?.completing ? (
                               <Loader size={16} className="mr-2 animate-spin" />
@@ -657,11 +655,10 @@ const ContractManagement = () => {
                                 handleConfirmCompletion(contract._id)
                               }
                               disabled={!!actionLoading[contract._id]?.confirming}
-                              className={`inline-flex items-center px-4 py-2 text-white text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 transition-colors cursor-pointer ${
-                                actionLoading[contract._id]?.confirming
+                              className={`inline-flex items-center px-4 py-2 text-white text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 transition-colors cursor-pointer ${actionLoading[contract._id]?.confirming
                                   ? "bg-sky-300 opacity-90 cursor-not-allowed"
                                   : "bg-[#55b3f3] hover:bg-sky-500"
-                              }`}
+                                }`}
                             >
                               {actionLoading[contract._id]?.confirming ? (
                                 <Loader size={16} className="mr-2 animate-spin" />
@@ -822,8 +819,8 @@ const ContractManagement = () => {
                       key={star}
                       onClick={() => setFeedback({ ...feedback, rating: star })}
                       className={`p-1 transition-transform transform hover:scale-110 cursor-pointer ${star <= feedback.rating
-                          ? "text-yellow-400"
-                          : "text-gray-300 hover:text-yellow-300"
+                        ? "text-yellow-400"
+                        : "text-gray-300 hover:text-yellow-300"
                         }`}
                     >
                       <Star
@@ -871,11 +868,10 @@ const ContractManagement = () => {
                 <button
                   onClick={handleSubmitFeedback}
                   disabled={submittingFeedback}
-                  className={`px-4 py-2 rounded-md transition cursor-pointer text-white ${
-                    submittingFeedback
+                  className={`px-4 py-2 rounded-md transition cursor-pointer text-white ${submittingFeedback
                       ? "bg-sky-300 cursor-not-allowed"
                       : "bg-sky-500 hover:bg-sky-600"
-                  }`}
+                    }`}
                 >
                   <span className="inline-flex items-center">
                     {submittingFeedback && (
