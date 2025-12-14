@@ -131,21 +131,13 @@ const updateUserVerificationStatus = async (
 
     if (bothUploaded) {
       updateData.idVerificationSubmittedAt = now;
-      if (credential.userType === "worker") {
-        updateData.verificationStatus = "pending";
-        updateData.idVerificationApprovedAt = null;
-        updateData.idVerificationRejectedAt = null;
-        updateData.approvedByAdminId = null;
-        updateData.rejectedByAdminId = null;
-      } else {
-        updateData.verificationStatus = "approved";
-        updateData.idVerificationApprovedAt = now;
-        updateData.idVerificationRejectedAt = null;
-        updateData.approvedByAdminId = null;
-        updateData.rejectedByAdminId = null;
-        updateData.isVerified = true;
-        updateData.verifiedAt = now;
-      }
+      updateData.verificationStatus = "pending";
+      updateData.idVerificationApprovedAt = null;
+      updateData.idVerificationRejectedAt = null;
+      updateData.approvedByAdminId = null;
+      updateData.rejectedByAdminId = null;
+      updateData.isVerified = false;
+      updateData.verifiedAt = null;
     } else if (hasAnyDocument) {
       updateData.verificationStatus = "pending";
       updateData.idVerificationSubmittedAt =
@@ -852,8 +844,7 @@ const approveVerification = async (req, res) => {
 
   try {
     const { userId } = req.params;
-    // Use approveSchema which tolerates unexpected fields (e.g., reason) without requiring them
-    const { error, value } = approveSchema.validate(req.body);
+    const { error } = approveSchema.validate(req.body);
 
     if (error) {
       return res.status(400).json({
@@ -863,9 +854,6 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    const { requireResubmission } = value; // Currently not used, reserved for future logic
-
-    // Validate user ID format
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
         success: false,
@@ -874,7 +862,6 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    // Find user credential
     const credential = await Credential.findById(userId).session(session);
     if (!credential) {
       return res.status(404).json({
@@ -884,19 +871,20 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") {
+    if (!SUPPORTED_USER_TYPES.has(credential.userType)) {
       return res.status(403).json({
         success: false,
-        message: "ID verification is only required for workers",
-        code: "WORKER_ONLY_VERIFICATION",
+        message: "ID verification is only available for workers and clients",
+        code: "UNSUPPORTED_USER_TYPE",
       });
     }
 
-    // Get worker profile
-    const userProfile = await Worker.findOne({ credentialId: userId }).session(
-      session
-    );
+    const ProfileModel =
+      credential.userType === "worker" ? Worker : Client;
+
+    const userProfile = await ProfileModel.findOne({
+      credentialId: userId,
+    }).session(session);
 
     if (!userProfile) {
       return res.status(404).json({
@@ -906,7 +894,6 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    // Check if verification is pending
     if (userProfile.verificationStatus !== "pending") {
       return res.status(400).json({
         success: false,
@@ -916,7 +903,6 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    // Check if both documents exist
     if (!userProfile.idPictureId || !userProfile.selfiePictureId) {
       return res.status(400).json({
         success: false,
@@ -927,41 +913,50 @@ const approveVerification = async (req, res) => {
       });
     }
 
-    // Approve the ID verification
+    const now = new Date();
     userProfile.verificationStatus = "approved";
-    userProfile.idVerificationApprovedAt = new Date();
-
-    // Set worker as verified
+    userProfile.idVerificationApprovedAt = now;
+    userProfile.idVerificationRejectedAt = null;
+    userProfile.approvedByAdminId = req.admin?._id || null;
+    userProfile.rejectedByAdminId = null;
     userProfile.isVerified = true;
-    userProfile.verifiedAt = new Date();
+    userProfile.verifiedAt = now;
 
     await userProfile.save({ session });
 
-    // Update document statuses
-    await IDPicture.findByIdAndUpdate(
-      userProfile.idPictureId,
-      { verificationStatus: "approved" },
-      { session }
-    );
+    if (userProfile.idPictureId) {
+      await IDPicture.findByIdAndUpdate(
+        userProfile.idPictureId,
+        { verificationStatus: "approved" },
+        { session }
+      );
+    }
 
-    await Selfie.findByIdAndUpdate(
-      userProfile.selfiePictureId,
-      { verificationStatus: "approved" },
-      { session }
-    );
+    if (userProfile.selfiePictureId) {
+      await Selfie.findByIdAndUpdate(
+        userProfile.selfiePictureId,
+        { verificationStatus: "approved" },
+        { session }
+      );
+    }
 
     await session.commitTransaction();
+
+    const successMessage =
+      credential.userType === "worker"
+        ? "ID verification approved successfully - Worker is now verified"
+        : "ID verification approved successfully - Client is now verified";
 
     logger.info("ID verification approved", {
       userId,
       userType: credential.userType,
       email: credential.email,
-      approvedBy: req.admin?.userName || req.admin?.id,
+      approvedBy: req.admin?.userName || req.admin?._id,
     });
 
     res.status(200).json({
       success: true,
-      message: "ID verification approved successfully - Worker is now verified",
+      message: successMessage,
       code: "VERIFICATION_APPROVED",
       data: {
         userId,
@@ -981,7 +976,7 @@ const approveVerification = async (req, res) => {
       error: error.message,
       stack: error.stack,
       userId: req.params.userId,
-      adminId: req.admin?.id,
+      adminId: req.admin?._id,
     });
 
     res.status(500).json({
@@ -1024,7 +1019,6 @@ const rejectVerification = async (req, res) => {
       });
     }
 
-    // Find user credential
     const credential = await Credential.findById(userId).session(session);
     if (!credential) {
       return res.status(404).json({
@@ -1034,19 +1028,20 @@ const rejectVerification = async (req, res) => {
       });
     }
 
-    // Only workers need ID verification
-    if (credential.userType !== "worker") {
+    if (!SUPPORTED_USER_TYPES.has(credential.userType)) {
       return res.status(403).json({
         success: false,
-        message: "ID verification is only required for workers",
-        code: "WORKER_ONLY_VERIFICATION",
+        message: "ID verification is only available for workers and clients",
+        code: "UNSUPPORTED_USER_TYPE",
       });
     }
 
-    // Get worker profile
-    const userProfile = await Worker.findOne({ credentialId: userId }).session(
-      session
-    );
+    const ProfileModel =
+      credential.userType === "worker" ? Worker : Client;
+
+    const userProfile = await ProfileModel.findOne({
+      credentialId: userId,
+    }).session(session);
 
     if (!userProfile) {
       return res.status(404).json({
@@ -1066,46 +1061,54 @@ const rejectVerification = async (req, res) => {
       });
     }
 
-    // Reject the verification
     userProfile.verificationStatus = "rejected";
     userProfile.idVerificationRejectedAt = new Date();
-
-    // Unverify the worker
+    userProfile.idVerificationApprovedAt = null;
+    userProfile.rejectedByAdminId = req.admin?._id || null;
+    userProfile.approvedByAdminId = null;
     userProfile.isVerified = false;
     userProfile.verifiedAt = null;
 
     await userProfile.save({ session });
 
-    // Update document statuses
-    await IDPicture.findByIdAndUpdate(
-      userProfile.idPictureId,
-      {
-        verificationStatus: "rejected",
-      },
-      { session }
-    );
+    if (userProfile.idPictureId) {
+      await IDPicture.findByIdAndUpdate(
+        userProfile.idPictureId,
+        {
+          verificationStatus: "rejected",
+        },
+        { session }
+      );
+    }
 
-    await Selfie.findByIdAndUpdate(
-      userProfile.selfiePictureId,
-      {
-        verificationStatus: "rejected",
-      },
-      { session }
-    );
+    if (userProfile.selfiePictureId) {
+      await Selfie.findByIdAndUpdate(
+        userProfile.selfiePictureId,
+        {
+          verificationStatus: "rejected",
+        },
+        { session }
+      );
+    }
 
     await session.commitTransaction();
+
+    const rejectionMessage =
+      credential.userType === "worker"
+        ? "ID verification rejected - worker can resubmit documents"
+        : "ID verification rejected - client can resubmit documents";
 
     logger.info("ID verification rejected", {
       userId,
       userType: credential.userType,
       email: credential.email,
-      rejectedBy: req.admin?.userName || req.admin?.id,
+      rejectedBy: req.admin?.userName || req.admin?._id,
       reason,
     });
 
     res.status(200).json({
       success: true,
-      message: "ID verification rejected - worker can resubmit documents",
+      message: rejectionMessage,
       code: "VERIFICATION_REJECTED",
       data: {
         userId,

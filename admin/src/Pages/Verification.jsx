@@ -19,7 +19,7 @@ import {
 const Verification = () => {
   const [pendingVerifications, setPendingVerifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedWorker, setSelectedWorker] = useState(null);
+  const [selectedVerification, setSelectedVerification] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,7 +29,7 @@ const Verification = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [userTypeFilter, setUserTypeFilter] = useState("client");
   const isWorkerView = userTypeFilter === "worker";
-  const summaryLabel = isWorkerView ? "Pending" : "Client submissions";
+  const summaryLabel = isWorkerView ? "Pending workers" : "Client verifications";
 
   // Fetch pending verifications
   const fetchPending = async (type = userTypeFilter) => {
@@ -56,28 +56,52 @@ const Verification = () => {
     setRefreshing(false);
   };
 
-  const handleApproveWorker = async () => {
-    if (!selectedWorker || selectedWorker.userType !== "worker") return;
+  const handleApprove = async () => {
+    if (!selectedVerification) return;
+
+    const userLabel =
+      selectedVerification.userType === "worker" ? "Worker" : "Client";
+
     try {
       setActionLoading(true);
-      await approveVerification(selectedWorker.credentialId);
-      setPendingVerifications((prev) =>
-        prev.filter((w) => w.credentialId !== selectedWorker.credentialId)
+      const { data } = await approveVerification(
+        selectedVerification.credentialId
       );
+
+      const approvedAt = data?.data?.approvedAt || new Date().toISOString();
+
+      setPendingVerifications((prev) => {
+        if (selectedVerification.userType === "worker") {
+          return prev.filter(
+            (entry) => entry.credentialId !== selectedVerification.credentialId
+          );
+        }
+
+        return prev.map((entry) =>
+          entry.credentialId === selectedVerification.credentialId
+            ? {
+                ...entry,
+                verificationStatus: "approved",
+                idVerificationApprovedAt: approvedAt,
+              }
+            : entry
+        );
+      });
+
       setShowModal(false);
-      setSelectedWorker(null);
-      alert("Worker verified successfully!");
+      setSelectedVerification(null);
+      alert(`${userLabel} verified successfully!`);
     } catch (err) {
-      console.error("Error approving worker:", err);
-      const msg = err.response?.data?.message || "Error approving worker.";
+      console.error("Error approving verification:", err);
+      const msg = err.response?.data?.message || "Error approving verification.";
       alert(msg);
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleRejectWorker = async () => {
-    if (!selectedWorker || selectedWorker.userType !== "worker") return;
+  const handleReject = async () => {
+    if (!selectedVerification) return;
 
     const reason = rejectionReason.trim();
     if (!reason) {
@@ -85,30 +109,38 @@ const Verification = () => {
       return;
     }
 
-    if (selectedWorker.verificationStatus !== "pending") {
-      alert("Only pending workers can be rejected.");
+    if ((selectedVerification.verificationStatus || "").toLowerCase() !== "pending") {
+      alert("Only pending verifications can be rejected.");
       return;
     }
 
+    const userLabel =
+      selectedVerification.userType === "worker" ? "Worker" : "Client";
+
     try {
       setActionLoading(true);
-      await rejectVerification(selectedWorker.credentialId, reason, true);
-      // Remove by credentialId for consistency with approve flow
+      await rejectVerification(
+        selectedVerification.credentialId,
+        reason,
+        true
+      );
       setPendingVerifications((prev) =>
-        prev.filter((w) => w.credentialId !== selectedWorker.credentialId)
+        prev.filter(
+          (entry) => entry.credentialId !== selectedVerification.credentialId
+        )
       );
       setShowModal(false);
       setShowRejectModal(false);
-      setSelectedWorker(null);
+      setSelectedVerification(null);
       setRejectionReason("");
-      alert("Worker verification rejected!");
+      alert(`${userLabel} verification rejected!`);
     } catch (err) {
-      console.error("Error rejecting worker:", err);
+      console.error("Error rejecting verification:", err);
       const msg =
         err.response?.data?.errors?.[0] ||
         err.response?.data?.message ||
         err.message ||
-        "Error rejecting worker.";
+        "Error rejecting verification.";
       alert(msg);
     } finally {
       setActionLoading(false);
@@ -148,12 +180,12 @@ const Verification = () => {
                 <Shield className="h-6 w-6 text-blue-600" />
                 {isWorkerView
                   ? "Worker Verification Dashboard"
-                  : "Client Verification Viewer"}
+                  : "Client Verification Dashboard"}
               </h1>
               <p className="text-gray-600 mt-1">
                 {isWorkerView
                   ? "Review and verify worker identification documents"
-                  : "Clients are automatically verified when documents are submitted. Use this view to audit their uploads."}
+                  : "Review, approve, or reject client identification documents once both uploads are submitted."}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -306,7 +338,9 @@ const Verification = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
                             onClick={() => {
-                              setSelectedWorker(worker);
+                              setSelectedVerification(worker);
+                              setShowRejectModal(false);
+                              setRejectionReason("");
                               setShowModal(true);
                             }}
                             className="flex items-center gap-1 px-2 py-1 text-xs bg-[#55b3f3] text-white rounded hover:bg-sky-600 transition-colors cursor-pointer"
@@ -326,10 +360,13 @@ const Verification = () => {
       </div>
 
       {/* Verification Modal */}
-      {showModal && selectedWorker && (
+      {showModal && selectedVerification && (
         <VerificationModal
-          worker={selectedWorker}
-          allowActions={isWorkerView}
+          verification={selectedVerification}
+          allowActions={
+            (selectedVerification.verificationStatus || "").toLowerCase() ===
+            "pending"
+          }
           showRejectModal={showRejectModal}
           setShowRejectModal={setShowRejectModal}
           // verificationNotes={verificationNotes}
@@ -337,11 +374,12 @@ const Verification = () => {
           rejectionReason={rejectionReason}
           setRejectionReason={setRejectionReason}
           actionLoading={actionLoading}
-          onApprove={handleApproveWorker}
-          onReject={handleRejectWorker}
+          onApprove={handleApprove}
+          onReject={handleReject}
           onClose={() => {
             setShowModal(false);
-            setSelectedWorker(null);
+            setSelectedVerification(null);
+            setShowRejectModal(false);
             // setVerificationNotes("");
             setRejectionReason("");
           }}
@@ -353,7 +391,7 @@ const Verification = () => {
 
 // Modal Component
 const VerificationModal = ({
-  worker,
+  verification,
   allowActions,
   showRejectModal,
   setShowRejectModal,
@@ -366,15 +404,14 @@ const VerificationModal = ({
   onReject,
   onClose,
 }) => {
-  const canReject =
-    !!rejectionReason.trim() && worker?.verificationStatus === "pending";
+  const canReject = allowActions && !!rejectionReason.trim();
   return (
-  <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-50 flex items-center justify-center p-4 z-[2000]">
+    <div className="fixed inset-0 bg-[#f4f6f6] bg-opacity-50 flex items-center justify-center p-4 z-[2000]">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-md">
         {/* Modal Header */}
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-900">
-            Verification Documents - {worker.fullName}
+            Verification Documents - {verification.fullName}
           </h2>
           <button
             onClick={onClose}
@@ -389,8 +426,8 @@ const VerificationModal = ({
           <div className="flex-1">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Selfie</h3>
             <img
-              src={worker.selfieUrl || "/placeholder.png"}
-              alt="Worker Selfie"
+              src={verification.selfieUrl || "/placeholder.png"}
+              alt="User Selfie"
               className="w-full h-64 object-contain rounded border border-gray-200"
             />
           </div>
@@ -399,8 +436,8 @@ const VerificationModal = ({
               ID Picture
             </h3>
             <img
-              src={worker.idPictureUrl || "/placeholder.png"}
-              alt="Worker ID"
+              src={verification.idPictureUrl || "/placeholder.png"}
+              alt="User ID"
               className="w-full h-64 object-contain rounded border border-gray-200"
             />
           </div>
@@ -455,8 +492,8 @@ const VerificationModal = ({
             </>
           ) : (
             <p className="text-sm text-gray-600">
-              Clients are automatically verified once both documents are uploaded.
-              This section is read-only for record keeping.
+              This record has already been processed. Only pending submissions can
+              be approved or rejected.
             </p>
           )}
         </div>

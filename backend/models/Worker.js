@@ -218,6 +218,7 @@ const WorkerSchema = new mongoose.Schema(
     approvedByAdminId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
+      default: null,
     },
     idVerificationRejectedAt: {
       type: Date,
@@ -226,6 +227,7 @@ const WorkerSchema = new mongoose.Schema(
     rejectedByAdminId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
+      default: null,
     },
 
     // ==================== EXISTING WORKER FIELDS ====================

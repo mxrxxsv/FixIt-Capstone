@@ -184,13 +184,8 @@ const ClientSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    indexes: [
-      { credentialId: 1 },
-      { isVerified: 1 },
-      { verifiedAt: 1 },
-      { blocked: 1 },
-      { "address.city": 1, "address.province": 1 },
-    ],
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
@@ -214,7 +209,6 @@ ClientSchema.virtual("verificationStatusText").get(function () {
 });
 
 // ==================== INDEXES ====================
-ClientSchema.index({ credentialId: 1 }, { unique: true });
 ClientSchema.index({ verificationStatus: 1 });
 ClientSchema.index({ idVerificationSubmittedAt: 1 });
 ClientSchema.index({ isVerified: 1 });
